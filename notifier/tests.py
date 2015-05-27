@@ -2,7 +2,7 @@
 ## Imports
 ###############################################################################
 # Django
-from django.contrib.auth.models import User, Group
+from django.contrib.auth.models import Group
 from django.contrib.contenttypes.models import ContentType
 from django.test import TestCase
 from django.contrib.auth.models import Permission
@@ -42,7 +42,7 @@ class PreferencesTests(TestCase):
         self.test2_notification.backends.add(
             self.email_backend)
 
-        self.user1 = User.objects.create(
+        self.user1 = get_user_model().objects.create(
             username='user1',
             email='user1@example.com'
         )
@@ -94,6 +94,8 @@ class PermissionTests(TestCase):
     """Tests related to permission checking for notifications."""
 
     def setUp(self):
+        User = get_user_model()
+
         self.user1 = User.objects.create(
             username='user1',
             email='user1@example.com'
@@ -121,6 +123,8 @@ class PermissionTests(TestCase):
 
     def test1PermissionFunction(self):
         """Test the Notification.check_perms function."""
+        User = get_user_model()
+
         self.assertEqual(self.test1_notification.check_perms(self.user1),
             False, msg='Permission check Failed')
 
@@ -168,6 +172,8 @@ class UtilityFunctionTests(TestCase):
 
 class EmailTests(TestCase):
     def setUp(self):
+        User = get_user_model()
+
         self.user1 = User.objects.create(
             username='user1',
             email='user1@example.com'

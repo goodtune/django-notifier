@@ -1,5 +1,5 @@
 ###############################################################################
-## Imports
+# Imports
 ###############################################################################
 # Python
 from importlib import import_module
@@ -22,9 +22,9 @@ from notifier import settings as notifier_settings
 
 
 ###############################################################################
-## Code
+# Code
 ###############################################################################
-def create_backends(app, **kwargs):
+def create_backends(app=None, sender=None, **kwargs):
     """
     Creates/Updates Backend objects based on NOTIFIER_BACKENDS settings.
 
@@ -32,7 +32,9 @@ def create_backends(app, **kwargs):
     not suppossed to be modified by user. They will be over-written on restart.
     """
 
-    if South and not app == 'notifier':
+    name = app or sender.name
+
+    if South and not name == 'notifier':
         return
 
     for klass in notifier_settings.BACKEND_CLASSES:
@@ -49,18 +51,22 @@ def create_backends(app, **kwargs):
             backend.save()
 
 
-def create_notifications(app, **kwargs):
+def create_notifications(app=None, sender=None, **kwargs):
     """
     Creates all the notifications specified in notifiers.py for all apps
     in INSTALLED_APPS
     """
 
-    if South and not app == 'notifier':
+    name = app or sender.name
+
+    if South and not name == 'notifier':
         return
 
     for installed_app in settings.INSTALLED_APPS:
         try:
-            import_module(installed_app + '.notifications')
+            import_module(
+                installed_app + '.' + notifier_settings.AUTO_CREATE_MODULE_NAME
+            )
         except ImportError:
             pass
 

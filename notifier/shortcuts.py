@@ -5,7 +5,7 @@
 from collections import Iterable
 
 # Django
-from django.contrib.auth.models import Group, Permission, User
+from django.contrib.auth.models import Group, Permission
 from django.db.models.query import QuerySet
 
 # User
@@ -95,7 +95,7 @@ def update_preferences(name, user, prefs_dict):
     """
     notification = Notification.objects.get(name=name)
 
-    if isinstance(user, User):
+    if isinstance(user, get_user_model()):
         return notification.update_user_prefs(user, prefs_dict)
     elif isinstance(user, Group):
         return notification.update_group_prefs(user, prefs_dict)

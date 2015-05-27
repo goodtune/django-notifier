@@ -23,3 +23,6 @@ def get_version(short=False):
     if VERSION[3] != "f":
         version = "%s%s%s" % (version, VERSION[3], VERSION[4])
     return version
+
+
+default_app_config = 'notifier.apps.NotifierConfig'

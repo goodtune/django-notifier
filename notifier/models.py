@@ -6,7 +6,7 @@ from collections import Iterable
 from importlib import import_module
 
 # Django
-from django.contrib.auth.models import User, Group, Permission
+from django.contrib.auth.models import Group, Permission
 from django.core.cache import cache
 from django.core.exceptions import PermissionDenied
 from django.db import models
@@ -14,42 +14,69 @@ from django.db.models import Q
 from django.db.models.signals import pre_delete
 from django.dispatch import receiver
 from django.utils.timezone import now
+from django.conf import settings
+from django.utils.translation import ugettext_lazy as _
 
 # User
-from notifier import managers
+from . import managers
+from . import settings as app_settings
+from . import signals
 
 
 ###############################################################################
 ## Models
 ###############################################################################
 class BaseModel(models.Model):
-    """Abstract base class with auto-populated created and updated fields. """
-    created = models.DateTimeField(default=now, db_index=True)
-    updated = models.DateTimeField(default=now, db_index=True)
+    """
+    Abstract base class with auto-populated created and updated fields.
+    """
+    created_at = models.DateTimeField(
+        _("created at"),
+        auto_now_add=True,
+        db_index=True,
+        )
+    updated_at = models.DateTimeField(
+        _("updated at"),
+        auto_now=True,
+        )
 
     class Meta:
         abstract = True
-
-    def save(self, *args, **kwargs):
-        self.updated = now()
-        super(BaseModel, self).save(*args, **kwargs)
 
 
 class Backend(BaseModel):
     """
     Entries for various delivery backends (SMS, Email)
     """
-    name = models.CharField(max_length=200, unique=True, db_index=True)
-    display_name = models.CharField(max_length=200, null=True)
-    description = models.CharField(max_length=500, null=True)
+    name = models.CharField(
+        _("name"),
+        max_length=200,
+        unique=True,
+        db_index=True,
+        )
+    display_name = models.CharField(
+        _("display name"),
+        max_length=200,
+        blank=True,
+        )
+    description = models.TextField(
+        _("description"),
+        blank=True,
+        )
 
     # This can be set to False to stop all deliveries using this
     # method, regardless of permissions and preferences
-    enabled = models.BooleanField(default=True)
+    enabled = models.BooleanField(
+        _("enabled"),
+        default=True,
+        )
 
     # The klass value defines the class to be used to send the notification.
-    klass = models.CharField(max_length=500,
-        help_text='Example: notifier.backends.EmailBackend')
+    klass = models.CharField(
+        _("class"),
+        max_length=500,
+        help_text='Example: notifier.backends.EmailBackend',
+        )
 
     def __unicode__(self):
         return self.name
@@ -68,12 +95,16 @@ class Backend(BaseModel):
 
         returns Boolean according to success of delivery.
         """
-
         backendobject = self.backendclass(notification)
         sent_success = backendobject.send(user, context)
 
-        SentNotification.objects.create(user=user, notification=notification,
-            backend=self, success=sent_success)
+        if app_settings.CREATE_SENT_NOTIFICATIONS:
+            SentNotification.objects.create(
+                user=user,
+                notification=notification,
+                backend=self,
+                success=sent_success,
+                )
 
         return sent_success
 
@@ -82,22 +113,41 @@ class Notification(BaseModel):
     """
     Entries for various notifications
     """
-    name = models.CharField(max_length=200, unique=True, db_index=True)
-    display_name = models.CharField(max_length=200)
+    name = models.CharField(
+        _("name"),
+        max_length=200,
+        unique=True,
+        db_index=True,
+        )
+    display_name = models.CharField(
+        _("display name"),
+        max_length=200,
+        )
 
     # This field determines whether the notification is to be shown
     #   to users or it is private and only set by code.
     # This only affects UI, the notification is otherwise enabled
     #   and usable in all ways.
-    public = models.BooleanField(default=True)
+    public = models.BooleanField(
+        _("public"),
+        default=True,
+        )
 
     # user should have all the permissions selected here to be able to change
     # the user prefs for this notification or see it in the UI
-    permissions = models.ManyToManyField(Permission, blank=True)
+    permissions = models.ManyToManyField(
+        Permission,
+        verbose_name=_("permissions"),
+        blank=True,
+        )
 
     # These are the backend methods that are allowed for this type of
     # notification
-    backends = models.ManyToManyField(Backend, blank=True)
+    backends = models.ManyToManyField(
+        Backend,
+        verbose_name=_("backends"),
+        blank=True,
+        )
 
     objects = managers.NotificationManager()
 
@@ -107,9 +157,10 @@ class Notification(BaseModel):
     def check_perms(self, user):
         # Need an iterable with permission strings to check using has_perms.
         # This makes it possible to take advantage of the cache.
-        perm_list = set(
-            ["%s.%s" % (p.content_type.app_label, p.codename) for p in self.permissions.select_related()]
-        )
+        perm_list = set([
+            "%s.%s" % (p.content_type.app_label, p.codename)
+            for p in self.permissions.select_related()
+            ])
 
         if not user.has_perms(perm_list):
             return False
@@ -221,9 +272,17 @@ class Notification(BaseModel):
         if not isinstance(users, Iterable):
             users = [users]
 
-        for user in users:
-            for backend in self.get_backends(user):
-                backend.send(user, self, context)
+        try:
+            for user in users:
+                for backend in self.get_backends(user):
+                    backend.send(user, self, context)
+        finally:
+            signals.notification_posted.send(
+                sender=self.__class__,
+                notification=self,
+                users=users,
+                context=context,
+                )
 
 
 class GroupPrefs(BaseModel):
@@ -239,6 +298,8 @@ class GroupPrefs(BaseModel):
 
     class Meta:
         unique_together = ('group', 'notification', 'backend')
+        verbose_name = _("Group prefs")
+        verbose_name_plural = _("Group prefs")
 
     def __unicode__(self):
         return '%s:%s:%s' % (self.group, self.notification, self.backend)
@@ -251,15 +312,17 @@ class UserPrefs(BaseModel):
     Supercedes group setting.
     If notification preference is not explicitly set, then use group setting.
     """
-    user = models.ForeignKey(User)
-    notification = models.ForeignKey(Notification)
-    backend = models.ForeignKey(Backend)
+    user = models.ForeignKey(settings.AUTH_USER_MODEL)
+    notification = models.ForeignKey("Notification")
+    backend = models.ForeignKey("Backend")
     notify = models.BooleanField(default=True)
 
     objects = managers.UserPrefsManager()
 
     class Meta:
         unique_together = ('user', 'notification', 'backend')
+        verbose_name = _("User prefs")
+        verbose_name_plural = _("User prefs")
 
     def __unicode__(self):
         return '%s:%s:%s' % (self.user, self.notification, self.backend)
@@ -274,10 +337,10 @@ class SentNotification(BaseModel):
     """
     Record of every notification sent.
     """
-    user = models.ForeignKey(User)
-    notification = models.ForeignKey(Notification)
-    backend = models.ForeignKey(Backend)
-    success = models.BooleanField()
+    user = models.ForeignKey(settings.AUTH_USER_MODEL)
+    notification = models.ForeignKey("Notification")
+    backend = models.ForeignKey("Backend")
+    success = models.BooleanField(default=False)
     read = models.BooleanField(default=False)
 
     def __unicode__(self):
@@ -287,8 +350,10 @@ class SentNotification(BaseModel):
 ###############################################################################
 ## Signal Recievers
 ###############################################################################
-@receiver(pre_delete, sender=Backend,
-    dispatch_uid='notifier.models.backend_pre_delete')
+@receiver(
+    pre_delete, sender=Backend,
+    dispatch_uid='notifier.models.backend_pre_delete'
+    )
 def backend_pre_delete(sender, instance, **kwargs):
     raise PermissionDenied(
         'Cannot delete backend %s. Remove from settings.' % instance.name)
