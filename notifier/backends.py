@@ -7,6 +7,7 @@ from smtplib import SMTPException
 # Django
 from django.conf import settings
 from django.contrib.sites.models import Site
+from django.core.exceptions import ImproperlyConfigured
 from django.core.mail import send_mail
 from django.template.loader import render_to_string
 
@@ -31,9 +32,14 @@ class BaseBackend(object):
         else:
             self.context = context
 
+        try:
+            site = Site.objects.get_current()
+        except ImproperlyConfigured:
+            site = None
+
         self.context.update({
             'user': user,
-            'site': Site.objects.get_current()
+            'site': site,
         })
 
 
