@@ -2,6 +2,7 @@
 ## Imports
 ###############################################################################
 # Django
+from django.contrib.auth import get_user_model
 from django.contrib.auth.models import Group
 from django.contrib.contenttypes.models import ContentType
 from django.test import TestCase

@@ -5,6 +5,7 @@
 from collections import Iterable
 
 # Django
+from django.contrib.auth import get_user_model
 from django.contrib.auth.models import Group, Permission
 from django.db.models.query import QuerySet
 
