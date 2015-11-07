@@ -23,7 +23,7 @@ class BaseBackend(object):
 
     def __init__(self, notification, *args, **kwargs):
         self.notification = notification
-        self.template = ('/notifier/%s_%s.txt' % (notification.name, self.name))
+        self.template = ('notifier/%s_%s.txt' % (notification.name, self.name))
 
     # Define how to send the notification
     def send(self, user, context=None):
